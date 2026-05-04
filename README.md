@@ -51,7 +51,7 @@ class LojaView(View):
 @bot.command()
 async def loja(ctx):
     embed = discord.Embed(
-        title="🔥 LOJA OFICIAL",
+        title="🔥 LOJA",
         description="Escolha seu plano:",
         color=discord.Color.green()
     )
@@ -61,68 +61,4 @@ async def loja(ctx):
 
     await ctx.send(embed=embed, view=LojaView())
 
-async def criar_pagamento(interaction, plano):
-    preco = PLANOS[plano]["preco"]
-
-    payment = sdk.payment().create({
-        "transaction_amount": preco,
-        "description": f"Plano {plano}",
-        "payment_method_id": "pix",
-        "payer": {"email": f"user{interaction.user.id}@gmail.com"}
-    })
-
-    data = payment["response"]
-    payment_id = data["id"]
-
-    pagamentos[payment_id] = {
-        "user_id": interaction.user.id,
-        "plano": plano
-    }
-
-    qr = data["point_of_interaction"]["transaction_data"]["qr_code"]
-
-    await interaction.response.send_message(
-        f"💰 PIX:\n{qr}\n\nAguardando pagamento...",
-        ephemeral=True
-    )
-
-@tasks.loop(seconds=10)
-async def verificar_pagamentos():
-    for payment_id in list(pagamentos.keys()):
-        payment = sdk.payment().get(payment_id)
-        if payment["response"]["status"] == "approved":
-            info = pagamentos[payment_id]
-            user = await bot.fetch_user(info["user_id"])
-
-            aguardando_uid[user.id] = info["plano"]
-
-            await user.send("✅ Pagamento aprovado! Envie seu UID.")
-            del pagamentos[payment_id]
-
-@bot.event
-async def on_message(message):
-    await bot.process_commands(message)
-
-    if isinstance(message.channel, discord.DMChannel):
-        if message.author.id not in aguardando_uid:
-            return
-
-        plano = aguardando_uid[message.author.id]
-        dias = PLANOS[plano]["dias"]
-
-        r = requests.post(API_URL, json={
-            "account_id": message.content,
-            "for_days": dias
-        }, headers={
-            "X-API-KEY": API_KEY,
-            "Content-Type": "application/json"
-        })
-
-        if r.json().get("success"):
-            await message.channel.send("🔥 ATIVADO!")
-        else:
-            await message.channel.send("❌ ERRO")
-
-        del aguardando_uid[message.author.id]
-
-bot.run(TOKEN)
+async def criar_pag
