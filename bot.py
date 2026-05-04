@@ -44,4 +44,6 @@ class LojaView(View):
     async def sete_dias(self, interaction: discord.Interaction, button: Button):
         await criar_pagamento(interaction, "7d")
 
-    @discord.ui.button(label="30 DIAS", style
+    @discord.ui.button(label="30 DIAS", style=discord.ButtonStyle.red)
+    async def trinta_dias(self, interaction: discord.Interaction, button: Button):
+        await criar_pagamento(interaction, "30d")
