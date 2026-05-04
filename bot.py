@@ -9,8 +9,6 @@ TOKEN = os.getenv("TOKEN")
 MP_TOKEN = os.getenv("MP_TOKEN")
 API_KEY = os.getenv("API_KEY")
 
-API_URL = "http://painel.reflexo-games.com/api/add_uid"
-
 sdk = mercadopago.SDK(MP_TOKEN)
 
 intents = discord.Intents.default()
@@ -27,13 +25,11 @@ PLANOS = {
 pagamentos = {}
 aguardando_uid = {}
 
-# ================== BOT ONLINE ==================
 @bot.event
 async def on_ready():
     print(f"Bot online: {bot.user}")
     verificar_pagamentos.start()
 
-# ================== BOTÕES ==================
 class LojaView(View):
     def __init__(self):
         super().__init__(timeout=None)
@@ -50,92 +46,57 @@ class LojaView(View):
     async def trinta_dias(self, interaction: discord.Interaction, button: Button):
         await criar_pagamento(interaction, "30d")
 
-# ================== COMANDO PARA ENVIAR PAINEL ==================
 @bot.command()
 async def painel(ctx):
-    await ctx.send("💰 **Painel de Compras**", view=LojaView())
+    embed = discord.Embed(
+        title="🛒 Loja",
+        description="Escolha um plano:",
+        color=discord.Color.green()
+    )
+    await ctx.send(embed=embed, view=LojaView())
 
-# ================== CRIAR PAGAMENTO ==================
 async def criar_pagamento(interaction, plano):
-    user_id = interaction.user.id
     preco = PLANOS[plano]["preco"]
 
     pagamento = {
-        "transaction_amount": float(preco),
+        "transaction_amount": preco,
         "description": f"Plano {plano}",
         "payment_method_id": "pix",
-        "payer": {
-            "email": f"user{user_id}@gmail.com"
-        }
+        "payer": {"email": "cliente@email.com"}
     }
 
     response = sdk.payment().create(pagamento)
     data = response["response"]
 
-    pagamentos[user_id] = {
-        "id": data["id"],
-        "plano": plano
+    pagamentos[data["id"]] = {
+        "user": interaction.user.id,
+        "plano": plano,
+        "status": "pending"
     }
 
-    pix = data["point_of_interaction"]["transaction_data"]
+    qr = data["point_of_interaction"]["transaction_data"]["qr_code"]
+    copia_cola = data["point_of_interaction"]["transaction_data"]["qr_code_base64"]
 
-    await interaction.response.send_message(
-        f"💰 **Pagamento criado!**\n\n"
-        f"💸 Valor: R$ {preco}\n\n"
-        f"📲 Copia e cola:\n```{pix['qr_code']}```\n\n"
-        f"⏳ Aguardando pagamento...",
-        ephemeral=True
+    embed = discord.Embed(
+        title="💰 Pagamento PIX",
+        description=f"Plano: {plano}\nValor: R${preco}",
+        color=discord.Color.yellow()
     )
 
-# ================== VERIFICAR PAGAMENTO ==================
-@tasks.loop(seconds=10)
+    embed.add_field(name="PIX copia e cola", value=f"```{qr}```", inline=False)
+
+    await interaction.response.send_message(embed=embed)
+
+@tasks.loop(seconds=20)
 async def verificar_pagamentos():
-    for user_id, info in list(pagamentos.items()):
-        pagamento_id = info["id"]
+    for payment_id, info in pagamentos.items():
+        response = sdk.payment().get(payment_id)
+        status = response["response"]["status"]
 
-        result = sdk.payment().get(pagamento_id)
-        status = result["response"]["status"]
+        if status == "approved" and info["status"] == "pending":
+            info["status"] = "approved"
 
-        if status == "approved":
-            user = await bot.fetch_user(user_id)
+            user = await bot.fetch_user(info["user"])
+            await user.send(f"✅ Pagamento aprovado! Plano: {info['plano']}")
 
-            await user.send("✅ Pagamento aprovado!\nAgora envie seu UID:")
-
-            aguardando_uid[user_id] = info["plano"]
-            del pagamentos[user_id]
-
-# ================== RECEBER UID ==================
-@bot.event
-async def on_message(message):
-    if message.author.bot:
-        return
-
-    user_id = message.author.id
-
-    if user_id in aguardando_uid:
-        plano = aguardando_uid[user_id]
-        uid = message.content
-
-        dias = PLANOS[plano]["dias"]
-
-        try:
-            response = requests.post(API_URL, json={
-                "uid": uid,
-                "dias": dias,
-                "api_key": API_KEY
-            })
-
-            if response.status_code == 200:
-                await message.reply("✅ Plano ativado com sucesso!")
-            else:
-                await message.reply("❌ Erro ao ativar plano.")
-
-        except Exception as e:
-            await message.reply("❌ Erro na API.")
-
-        del aguardando_uid[user_id]
-
-    await bot.process_commands(message)
-
-# ================== START ==================
 bot.run(TOKEN)
