@@ -11,7 +11,7 @@ API_KEY = os.getenv("API_KEY")
 
 API_URL = "http://painel.reflexo-games.com/api/add_uid"
 
-sdk = mercadopago.SDK(MP_TOKEN)
+sdk = mercadopago.SDK(APP_USR-815231345790722-011418-bf44cf706f205f8e248a5fd078701741-3134496921)
 
 intents = discord.Intents.default()
 intents.message_content = True
